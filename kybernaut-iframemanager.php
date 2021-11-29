@@ -21,10 +21,7 @@ add_action('wp_enqueue_scripts', function () {
 		wp_enqueue_script('kbnt-iframe-manager', 'https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.js', [], false, true);
 		wp_add_inline_script('kbnt-iframe-manager', "
 			window.addEventListener('load', function(){
-
 				var manager = iframemanager();
-
-				// Example with youtube embed
 				manager.run({
 					currLang: document.documentElement.getAttribute('lang'),
 					services : {
@@ -52,19 +49,15 @@ add_action('wp_enqueue_scripts', function () {
 						},
 						vimeo : {
 						embedUrl: 'https://player.vimeo.com/video/{data-id}',
-
 						thumbnailUrl: function(id, setThumbnail){
-
 							var url = 'https://vimeo.com/api/v2/video/' + id + '.json';
 							var xhttp = new XMLHttpRequest();
-
 							xhttp.onreadystatechange = function() {
 								if (this.readyState == 4 && this.status == 200) {
 									var src = JSON.parse(this.response)[0].thumbnail_large;
 									setThumbnail(src);
 								}
 							};
-
 							xhttp.open('GET', url, true);
 							xhttp.send();
 						},
@@ -92,13 +85,16 @@ add_action('wp_enqueue_scripts', function () {
 			});
 		");
 
-		wp_enqueue_style(
-			'kbnt-iframe-manager',
-			'https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.css'
-		);
+		wp_enqueue_style('kbnt-iframe-manager','https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.css');
 	}
 });
 
+/**
+ * Parse service ID
+ * @param string $service Service name.
+ * @param string $url Service URL.
+ * @return string|false
+ */
 function kbnt_iframe_manager_parse_id($service, $url)
 {
 	if ($service === 'youtube') {
@@ -116,7 +112,7 @@ function kbnt_iframe_manager_parse_id($service, $url)
 }
 
 /**
- * Replace the default tag with custom block
+ * Replace the default core/embed for youtube & vimeo with custom iframe manager
  *
  * @param string $block_content The block content about to be appended.
  * @param array  $block         The full block, including name and attributes.
@@ -133,16 +129,17 @@ add_filter('render_block_core/embed', function ($block_content, $block) {
 		$doc->loadHTML($block_content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 		libxml_clear_errors();
 
+		// Parse iframe and replace it.
 		$iframes = $doc->getElementsByTagName('iframe');
-
 		foreach ($iframes as $iframe) {
 
+			// Prepare attributes for iframe manager.
 			$attributes = [
 				'data-service' => $provider,
 				'data-id' => kbnt_iframe_manager_parse_id($provider, $iframe->getAttribute('src')),
 				'data-title' => $iframe->getAttribute('title'),
 				'data-autoscale' => null,
-				'style' => 'position:absolute;top:0;right:0;bottom:0;left:0;',
+				'style' => 'position:absolute;top:0;right:0;bottom:0;left:0;', // Fixes default WP styles.
 			];
 
 			// Create new div for custom implementation
@@ -162,6 +159,7 @@ add_filter('render_block_core/embed', function ($block_content, $block) {
 			$iframe->parentNode->removeChild($iframe);
 		}
 
+		// Replace the block content.
 		$block_content = $doc->saveHTML();
 
 	}
