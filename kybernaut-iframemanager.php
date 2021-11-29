@@ -1,12 +1,12 @@
 <?php
 /*
   Plugin Name: Kybernaut - iframe manager
-  Description: Implementace iFrame Manageru od Oresta Bidy pro Gutenberg (https://github.com/orestbida/iframemanager). Work-in-proggress: podporuje YouTube & Vimeo.
+  Description: Implementation of iframe manageru by Oresta Bidy pro Gutenberg (https://github.com/orestbida/iframemanager). Work-in-proggress: supports YouTube & Vimeo core embed blocks.
   Version:     0.0.1
   Author:      Karolína Vyskočilová
   Author URI:  https://kybernaut.cz
   Copyright: © 2021 Karolína Vyskočilová
-  Text Domain: kbnt-iframe-manager
+  Text Domain: kbnt-iframemanager
   Domain Path: /languages
 
 */
