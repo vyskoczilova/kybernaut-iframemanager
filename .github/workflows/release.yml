@@ -1,0 +1,32 @@
+name: Release
+on:
+  release:
+    types: [published]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          path: ${{ github.workspace }}
+
+      # https://keithweaverca.medium.com/zip-code-base-with-github-actions-for-releases-aca66f530dae
+      - name: Release folder
+        run: rsync -arv --exclude='.git/' --exclude='.github/' --exclude='.gitignore' --exclude="TODO.md" --exclude="output.log" --exclude="docker_tag" . ./${{ github.event.repository.name }}
+
+      - name: Zip release
+        uses: thedoctor0/zip-release@master #https://github.com/TheDoctor0/zip-release
+        with:
+          path: './${{ github.event.repository.name }}' # zip together with the repo name
+          filename: '${{ github.event.repository.name }}.zip'
+          exclusions: '*.git* docker_tag output.log'
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{github.workspace}}/${{ github.event.repository.name }}.zip
+          asset_name: ${{ github.event.repository.name }}-${{ github.event.release.tag_name }}.zip
+          asset_content_type: application/zip
