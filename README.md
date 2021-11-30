@@ -1,3 +1,8 @@
-# Kybernaut Iframe Manager
+# Kybernaut IframeManager
 
-Simple implementation of Orest Bida's [Iframe manager](https://github.com/orestbida/iframemanager) script for WordPress, handles YouTube and Vimeo default core blocks.
+A simple plugin that implements Orest Bida's [IframeMananger](https://github.com/orestbida/iframemanager) script for WordPress.
+
+## Features
+
+* Replaces default `core/embed` blocks for YouTube and Vimeo with IframeManager upon the block render
+* WP localization
