@@ -11,81 +11,28 @@
 
 */
 
+
+/**
+ * Load plugin textdomain.
+ */
+add_action('init', function(){
+	load_plugin_textdomain('kbnt-iframemanager', false, dirname(plugin_basename(__FILE__)) . '/languages');
+});
+
 /**
  * Conditionally load script & style
  */
 add_action('wp_enqueue_scripts', function () {
 
 	if (has_block('core/embed')) {
-
-		wp_enqueue_script('kbnt-iframe-manager', 'https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.js', [], false, true);
-		wp_add_inline_script('kbnt-iframe-manager', "
-			window.addEventListener('load', function(){
-				var manager = iframemanager();
-				manager.run({
-					currLang: document.documentElement.getAttribute('lang'),
-					services : {
-						youtube : {
-							embedUrl: 'https://www.youtube-nocookie.com/embed/{data-id}',
-							thumbnailUrl: 'https://i3.ytimg.com/vi/{data-id}/hqdefault.jpg',
-							iframe : {
-								allow : 'accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen;',
-							},
-							cookie : {
-								name : 'cc_youtube'
-							},
-							languages : {
-								en : {
-									notice: 'This content is hosted by a third party. By showing the external content you accept the <a rel=\"noreferrer\" href=\"https://www.youtube.com/t/terms\" title=\"Terms and conditions\" target=\"_blank\">terms and conditions</a> of youtube.com.',
-									loadBtn: 'Load video',
-									loadAllBtn: 'Don\'t ask again'
-								},
-								cs : {
-									notice: 'Tento obsah je hostován třetí stranou. Zobrazením externího obsahu přijímáte <a rel=\"noreferrer\" href=\"https://www.youtube.com/t/terms\" title=\"Podmínky použití\" target=\"_blank\">podmínky použití</a> youtube.com.',
-									loadBtn: 'Načíst video',
-									loadAllBtn: 'Už se mě neptej'
-								}
-							}
-						},
-						vimeo : {
-						embedUrl: 'https://player.vimeo.com/video/{data-id}',
-						thumbnailUrl: function(id, setThumbnail){
-							var url = 'https://vimeo.com/api/v2/video/' + id + '.json';
-							var xhttp = new XMLHttpRequest();
-							xhttp.onreadystatechange = function() {
-								if (this.readyState == 4 && this.status == 200) {
-									var src = JSON.parse(this.response)[0].thumbnail_large;
-									setThumbnail(src);
-								}
-							};
-							xhttp.open('GET', url, true);
-							xhttp.send();
-						},
-						iframe : {
-							allow : 'accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen;',
-						},
-						cookie : {
-							name : 'cc_vimeo'
-						},
-						languages : {
-							'en' : {
-								notice: 'This content is hosted by a third party. By showing the external content you accept the <a rel=\"noreferrer\" href=\"https://vimeo.com/terms\" title=\"Terms and conditions\" target=\"_blank\">terms and conditions</a> of vimeo.com.',
-								loadBtn: 'Load video',
-								loadAllBtn: 'Don\'t ask again'
-							},
-							cs : {
-									notice: 'Tento obsah je hostován třetí stranou. Zobrazením externího obsahu přijímáte <a rel=\"noreferrer\" href=\https://vimeo.com/terms\" title=\"Podmínky použití\" target=\"_blank\">podmínky použití</a> vimeo.com.',
-									loadBtn: 'Načíst video',
-									loadAllBtn: 'Už se mě neptej'
-								}
-						}
-					}
-					}
-				});
-			});
-		");
-
-		wp_enqueue_style('kbnt-iframe-manager','https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.css');
+		wp_enqueue_script('kbnt-iframemanager', 'https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.js', [], false, true);
+		wp_enqueue_script('kbnt-iframemanager-init', plugins_url('/assets/iframemanager-init.js', __FILE__), ['kbnt-iframemanager'], filemtime(dirname(__FILE__) . '/assets/iframemanager-init.js'), true);
+		wp_localize_script('kbnt-iframemanager-init', 'props', [
+			'l10n_notice' => __('This content is hosted by a third party.', 'kbnt-iframemanager') . ' ' . sprintf(__('By showing the external content you accept the %1$s of %2$s.', 'kbnt-iframemanager'), '<a rel="noreferrer" href="3PARTYURL" title="Terms and conditions" target="_blank">' . __('Terms and conditions', 'kbnt-iframemanager') . '</a>', 'SITE'),
+			'l10n_loadBtn' => __('Load video', 'kbnt-iframemanager'),
+			'l10n_loadAllBtn' => __("Don't ask again", 'kbnt-iframemanager'),
+		]);
+		wp_enqueue_style('kbnt-iframemanager','https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.css');
 	}
 });
 
