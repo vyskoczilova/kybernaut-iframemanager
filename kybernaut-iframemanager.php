@@ -83,7 +83,7 @@ add_filter('render_block_core/embed', function ($block_content, $block) {
 	$provider = $block['attrs']['providerNameSlug'];
 
 	if (in_array($provider, ['obsluzna-rutina-kodu-pro-vlozeni', 'embed-handler'])) {
-		if (strpos($block['attrs']['url'], 'youtube')) {
+		if (strpos($block['attrs']['url'], 'youtube') !== false) {
 			$provider = 'youtube';
 		}
 	}
@@ -125,6 +125,12 @@ add_filter('render_block_core/embed', function ($block_content, $block) {
 			// Replace the iframe with newly created div with same classes and params.
 			$iframe->parentNode->appendChild($im);
 			$iframe->parentNode->removeChild($iframe);
+		}
+
+		if (strpos($block['attrs']['className'], 'wp-embed-aspect-16-9') !== false) {
+			$attribute = $doc->createAttribute('style');
+			$attribute->value = 'aspect-ratio:16/9;';
+			$doc->getElementsByTagName('figure')[0]->appendChild($attribute);
 		}
 
 		// Replace the block content.
