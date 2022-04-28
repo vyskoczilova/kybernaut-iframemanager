@@ -2,7 +2,7 @@
 /*
   Plugin Name: Kybernaut - iframe manager
   Description: Implementation of iframe manageru by Oresta Bidy pro Gutenberg (https://github.com/orestbida/iframemanager). Work-in-proggress: supports YouTube & Vimeo core embed blocks.
-  Version:     0.1.0
+  Version:     0.1.1
   Author:      Karolína Vyskočilová
   Author URI:  https://kybernaut.cz
   Copyright: © 2021 Karolína Vyskočilová
@@ -11,6 +11,19 @@
 
 */
 
+/**
+ * Handle updates.
+ */
+require 'inc/plugin-update-checker/plugin-update-checker.php';
+
+$profinitCookiesUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
+	'https://github.com/vyskoczilova/kybernaut-iframemanager',
+	__FILE__,
+	'kybernaut-iframemanager'
+);
+
+// Pull from releases.
+$profinitCookiesUpdateChecker->getVcsApi()->enableReleaseAssets();
 
 /**
  * Load plugin textdomain.
