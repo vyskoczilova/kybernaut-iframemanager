@@ -2,7 +2,7 @@
 /*
   Plugin Name: Kybernaut - iframe manager
   Description: Implementation of iframe manageru by Oresta Bidy pro Gutenberg (https://github.com/orestbida/iframemanager). Work-in-proggress: supports YouTube & Vimeo core embed blocks.
-  Version:     0.1.2
+  Version:     0.1.3
   Author:      Karolína Vyskočilová
   Author URI:  https://kybernaut.cz
   Copyright: © 2021 Karolína Vyskočilová
@@ -38,14 +38,13 @@ add_action('init', function(){
 add_action('wp_enqueue_scripts', function () {
 
 	if (has_block('core/embed')) {
-		wp_enqueue_script('kbnt-iframemanager', 'https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.js', [], false, true);
-		wp_enqueue_script('kbnt-iframemanager-init', plugins_url('/assets/iframemanager-init.js', __FILE__), ['kbnt-iframemanager'], filemtime(dirname(__FILE__) . '/assets/iframemanager-init.js'), true);
-		wp_localize_script('kbnt-iframemanager-init', 'props', [
+		wp_enqueue_script('kbnt-iframemanager', plugins_url('/assets/kybernaut-iframemanager.min.js', __FILE__), [], filemtime(dirname(__FILE__) . '/assets/kybernaut-iframemanager.min.js'), true);
+		wp_localize_script('kbnt-iframemanager', 'props', [
 			'l10n_notice' => __('This content is hosted by a third party.', 'kbnt-iframemanager') . ' ' . sprintf(__('By showing the external content you accept the %1$s of %2$s.', 'kbnt-iframemanager'), '<a rel="noreferrer" href="3PARTYURL" title="Terms and conditions" target="_blank">' . __('Terms and conditions', 'kbnt-iframemanager') . '</a>', 'SITE'),
 			'l10n_loadBtn' => __('Load video', 'kbnt-iframemanager'),
 			'l10n_loadAllBtn' => __("Don't ask again", 'kbnt-iframemanager'),
 		]);
-		wp_enqueue_style('kbnt-iframemanager','https://cdn.jsdelivr.net/gh/orestbida/iframemanager@v1.0/dist/iframemanager.css');
+		wp_enqueue_style('kbnt-iframemanager', plugins_url('/assets/kybernaut-iframemanager.min.css', __FILE__), [], filemtime(dirname(__FILE__) . '/assets/kybernaut-iframemanager.min.css'));
 	}
 });
 

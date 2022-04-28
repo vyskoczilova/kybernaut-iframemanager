@@ -1,0 +1,33 @@
+{
+  "name": "kybernaut-iframemanager",
+  "version": "0.2.0",
+  "description": "A simple plugin that implements Orest Bida's script for WordPress.",
+  "main": "index.js",
+  "scripts": {
+    "clean": "rimraf assets && mkdir assets",
+    "js-concat": "concat-glob-cli -f src/js/**/*.js -o assets/kybernaut-iframemanager.js",
+    "js-minify": "minify assets/kybernaut-iframemanager.js > assets/kybernaut-iframemanager.min.js",
+    "css-prefix": "postcss src/css/iframemanager.css --use=autoprefixer --no-map --output assets/kybernaut-iframemanager.css",
+    "css-minify": "cleancss --output assets/kybernaut-iframemanager.min.css assets/kybernaut-iframemanager.css",
+    "build": "npm run clean && npm run js-concat && npm run js-minify && npm run css-prefix && npm run css-minify"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vyskoczilova/kybernaut-iframemanager.git"
+  },
+  "author": "Karolína Vyskočilová <karolina@kybernaut.cz>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/vyskoczilova/kybernaut-iframemanager/issues"
+  },
+  "homepage": "https://github.com/vyskoczilova/kybernaut-iframemanager#readme",
+  "devDependencies": {
+    "autoprefixer": "^10.4.1",
+    "clean-css-cli": "^5.5.0",
+    "concat-glob-cli": "^0.1.0",
+    "minify": "^8.0.3",
+    "postcss": "^8.4.5",
+    "postcss-cli": "^9.1.0",
+    "rimraf": "^3.0.2"
+  }
+}
