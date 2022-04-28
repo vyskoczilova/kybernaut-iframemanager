@@ -86,7 +86,8 @@ add_filter('render_block_core/embed', function ($block_content, $block) {
 		$doc = new DOMDocument();
 
 		libxml_use_internal_errors(true);
-		$doc->loadHTML($block_content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+		# loadHTML in UTF-8 https://stackoverflow.com/questions/8218230/php-domdocument-loadhtml-not-encoding-utf-8-correctly
+		$doc->loadHTML(mb_convert_encoding($block_content, 'HTML-ENTITIES', 'UTF-8'), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 		libxml_clear_errors();
 
 		// Parse iframe and replace it.
