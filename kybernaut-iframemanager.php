@@ -81,6 +81,13 @@ function kbnt_iframe_manager_parse_id($service, $url)
 add_filter('render_block_core/embed', function ($block_content, $block) {
 
 	$provider = $block['attrs']['providerNameSlug'];
+
+	if (in_array($provider, ['obsluzna-rutina-kodu-pro-vlozeni', 'embed-handler'])) {
+		if (strpos($block['attrs']['url'], 'youtube')) {
+			$provider = 'youtube';
+		}
+	}
+
 	if (in_array($provider, ['youtube', 'vimeo'], true)) {
 
 		$doc = new DOMDocument();
