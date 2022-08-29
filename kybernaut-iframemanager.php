@@ -2,7 +2,7 @@
 /*
   Plugin Name: Kybernaut - iframe manager
   Description: Implementation of iframe manageru by Oresta Bidy pro Gutenberg (https://github.com/orestbida/iframemanager). Work-in-proggress: supports YouTube & Vimeo core embed blocks.
-  Version:     0.1.3
+  Version:     0.1.4
   Author:      Karolína Vyskočilová
   Author URI:  https://kybernaut.cz
   Copyright: © 2021 Karolína Vyskočilová
@@ -37,7 +37,7 @@ add_action('init', function(){
  */
 add_action('wp_enqueue_scripts', function () {
 
-	if (has_block('core/embed')) {
+	if (has_block('core/embed') || apply_filters('kbnt_iframe_manager_load_script', false)) {
 		wp_enqueue_script('kbnt-iframemanager', plugins_url('/assets/kybernaut-iframemanager.min.js', __FILE__), [], filemtime(dirname(__FILE__) . '/assets/kybernaut-iframemanager.min.js'), true);
 		wp_localize_script('kbnt-iframemanager', 'props', [
 			'l10n_notice' => __('This content is hosted by a third party.', 'kbnt-iframemanager') . ' ' . sprintf(__('By showing the external content you accept the %1$s of %2$s.', 'kbnt-iframemanager'), '<a rel="noreferrer" href="3PARTYURL" title="Terms and conditions" target="_blank">' . __('Terms and conditions', 'kbnt-iframemanager') . '</a>', 'SITE'),
