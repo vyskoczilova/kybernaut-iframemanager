@@ -1,6 +1,6 @@
 # Kybernaut IframeManager
 
-A simple plugin that implements Orest Bida's [IframeMananger](https://github.com/orestbida/iframemanager) script for WordPress.
+A simple plugin that implements Orest Bida's [IframeMananger 1.2.5](https://github.com/orestbida/iframemanager) script for WordPress.
 
 ## Features
 

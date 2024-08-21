@@ -1,668 +1,949 @@
 /*!
- * iframemanager v1.0
+ * iframemanager v1.2.5
  * Author Orest Bida
  * Released under the MIT License
  */
-(function(){
+(() => {
     'use strict';
 
-    var module = {
-        iframes : {},
-        preconnects : [],
-        preloads: [],
-        iframeObserver : null,
-        currLang : null,
-        services : null,
-        serviceNames : null,
-        
-        _getVideoProp : function(_div){
-            return {
-                _id: _div.dataset.id,
-                _title: _div.dataset.title,
-                thumbnail: _div.dataset['thumbnail'],
-                params: _div.dataset['params'],
-                thumbnailPreload: _div.hasAttribute('data-thumbnailpreload'),
-                div: _div,
-                backgroundDiv: null,
-                hasIframe: false,
-                hasNotice: false,
-                showNotice : true
-            }
-        },
+    /**
+     * @typedef {Object} servicePropObj
+     * @property {string} _id
+     * @property {string} _title
+     * @property {string} _thumbnail
+     * @property {string} _params
+     * @property {HTMLDivElement} _div
+     * @property {HTMLDivElement} _innerContainer
+     * @property {HTMLDivElement} _placeholderDiv
+     * @property {HTMLDivElement} _initialPlaceholderClone
+     * @property {HTMLIFrameElement} _iframe
+     * @property {HTMLDivElement} _backgroundDiv
+     * @property {boolean} _hasIframe
+     * @property {boolean} _hasNotice
+     * @property {boolean} _showNotice
+     * @property {boolean} _dataWidget
+     * @property {boolean} _dataPlaceholderVisible
+     * @property {Object.<string, string>} _iframeAttributes
+     */
+
+    /**
+     * @typedef {HTMLIFrameElement} IframeProp
+     */
+
+    /**
+     * @typedef {Object} CookieStructure
+     * @property {string} name
+     * @property {string} path
+     * @property {string} domain
+     * @property {string} sameSite
+     * @property {number} expiration
+     */
+
+    /**
+     * @typedef {Object} Language
+     * @property {string} notice
+     * @property {string} loadBtn
+     * @property {string} loadAllBtn
+     */
+
+    /**
+     * @typedef {Object} ServiceConfig
+     * @property {string} embedUrl
+     * @property {string | () => string} [thumbnailUrl]
+     * @property {IframeProp} [iframe]
+     * @property {CookieStructure} cookie
+     * @property {Object.<string, Language>} languages
+     * @property {Function} [onAccept]
+     * @property {Function} [onReject]
+     */
+
+    const API_EVENT_SOURCE = 'api';
+    const CLICK_EVENT_SOURCE = 'click';
+    const DATA_ID_PLACEHOLDER = '{data-id}';
+    const ACCEPT_ACTION = 'accept';
+    const REJECT_ACTION = 'reject';
+
+    const HIDE_NOTICE_CLASS = 'c-h-n';
+    const HIDE_LOADER_CLASS = 'c-h-b';
+    const SHOW_PLACEHOLDER_CLASS = 'show-ph';
+
+    let
 
         /**
-         * Lazy load all thumbnails of the iframes relative to specified service
-         * @param {String} service_name 
-         * @param {String} thumbnail_url 
+         * @type {Window}
          */
-        _lazyLoadThumnails : function(service_name, thumbnail_url){
-
-            var videos = this.iframes[service_name];
-            var length = videos.length;
-
-            if ("IntersectionObserver" in window) {
-                var thumbnailObserver = new IntersectionObserver(function(entries) {
-                    entries.forEach(function(entry){
-                        if(entry.isIntersecting){
-                            // true index of the video in the array relative to current service
-                            var _index = entry.target.dataset.index;
-                            module._loadThumbnail(thumbnail_url, videos[_index]);
-                            thumbnailObserver.unobserve(entry.target);
-                        }
-                    });
-                });
-   
-                for(var i=0; i<length; i++){
-                    thumbnailObserver.observe(videos[i].div);
-                }
-            }else{
-                // Fallback for old browsers
-                for(var i=0; i<length; i++){
-                    module._loadThumbnail(thumbnail_url, videos[i]);
-                }
-            }
-        },
+        win,
 
         /**
-         * 1. Set cookie (if not alredy set)
-         * 2. show iframes (relative to the specified service)
-         * @param {String} service_name 
+         * @type {Document}
          */
-        acceptService : function(service_name){
-            if(service_name === 'all'){
-                var length = this.serviceNames.length;
-                for(var i=0; i<length; i++){
-                    var service_name = this.serviceNames[i];
-                    _acceptService(service_name, this.services[service_name]);
-                }
-            }else{
-                if(this.serviceNames.indexOf(service_name) > -1){
-                    _acceptService(service_name, this.services[service_name]);
-                }
-            }
+        doc,
 
-            function _acceptService(service_name, service){
-                if(!module._getCookie(service['cookie']['name'])){
-                    module._setCookie(service['cookie']); 
-                }
-                module._hideAllNotices(service_name, service);
-            }
-        },
+        config,
 
         /**
-         * 1. set cookie
-         * 2. hide all notices 
-         * 3. how iframes (relative to the specified service)
-         * @param {String} service_name 
+         * @type {Object.<string, servicePropObj[]>}
          */
-         rejectService : function(service_name){
-            if(service_name === 'all'){
-                this.iframeObserver = null;
-                var length = this.serviceNames.length;
-                for(var i=0; i<length; i++){
-                    var service_name = this.serviceNames[i];
-                    _rejectService(service_name, this.services[service_name]);
-                }
-            }else{
-                if(this.serviceNames.indexOf(service_name) > -1){
-                    _rejectService(service_name, this.services[service_name]);
-                }
-            }
-
-            function _rejectService(service_name, service){
-                if(module._getCookie(service['cookie']['name'])){
-                    module._eraseCookie(service['cookie']);
-                }
-                module._showAllNotices(service_name, service);
-            }
-        },
+        allServiceProps = {},
 
         /**
-         * Set image as background
-         * @param {String} url 
-         * @param {Object} video 
+         * @type {Object.<string, IntersectionObserver>}
          */
-        _loadThumbnail: function(url, video){
-            
-            // Set custom thumbnail if provided
-            if(typeof video.thumbnail === 'string'){
-                video.thumbnailPreload && this._thumbnailPreload(video.thumbnail);
-                video.thumbnail !== "" && _loadBackgroundImage(video.thumbnail);
-            }else{
-
-                if(typeof url === "function"){
-                    
-                    url(video._id, function(src){
-                        module._preconnect(src);
-                        video.thumbnailPreload && this._thumbnailPreload(src);
-                        _loadBackgroundImage(src);
-                    });
-
-                }else if(typeof url === "string"){
-                    var src = url.replace('{data-id}', video._id);
-                    this._preconnect(src);
-                    video.thumbnailPreload && this._thumbnailPreload(src);
-                    _loadBackgroundImage(src);
-                }
-            }
-
-            function _loadBackgroundImage(src){
-                video.backgroundDiv.style.backgroundImage = "url('"+src+"')";
-
-                var img = new Image();
-                img.onload = function(){
-                    video.backgroundDiv.classList.add('loaded'); 
-                }
-                
-                img.src = src;
-            }
-        },
+        serviceObservers = {},
 
         /**
-         * Create iframe and append it into the specified div
-         * @param {Object} video 
-         * @param {Object} service 
+         * @type {Object.<string, boolean>}
          */
-        _createIframe: function(video, service) {
+        stopServiceObserver = {},
 
-            // Create iframe only if doesn't alredy have one
-            if(video.hasIframe) return;
-
-            video.iframe = this._createNode('iframe');
-            var iframeParams = video.params || (service['iframe'] && service['iframe']['params']);
-            
-            // Replace data-id with valid resource id
-            var src = service['embedUrl'].replace('{data-id}', video._id);
-
-            video.iframe['loading'] = 'lazy';
-            video._title && (video.iframe.title = video._title);
-
-            // Add allow attribute to iframe
-            if(service['iframe'] && service['iframe']['allow']){
-                video.iframe.allow = service['iframe']['allow'];
-            }
-
-            // Add parameters to src
-            if(iframeParams){
-                if (iframeParams.substring(0, 3) === "ap:"){
-                    src += iframeParams.substring(3);
-                }else{
-                    src += "?" + iframeParams
-                }
-            }
-
-            video.iframe.src = encodeURI(src);
-
-            // When iframe is loaded => hide background image
-            video.iframe.onload = function(){
-                video.div.classList.add('c-h-b');
-                video.iframe.onload = undefined;
-                service['iframe'] && typeof service['iframe']['onload'] === 'function' && service['iframe']['onload'](video._id, this);
-            }
-
-            video.hasIframe = true;
-            video.div.appendChild(video.iframe);          
-        },
+        currLang = '',
 
         /**
-         * Remove iframe HTMLElement from div
-         * @param {Object} video 
+         * @type {Object.<string, ServiceConfig>}
          */
-        _removeIframe: function(video){
-            video.iframe.parentNode.removeChild(video.iframe);
-            video.hasIframe = false;
-        },
+        services = {},
 
         /**
-         * Remove necessary classes to hide notice
-         * @param {Object} video 
+         * @type {string[]}
          */
-        _hideNotice : function(video){
-            if(video.showNotice){
-                video.div.classList.add('c-h-n');
-                video.showNotice = false;
-            }
-        },
+        serviceNames,
 
         /**
-         * Add necessary classes to show notice
-         * @param {Object} video 
+         * @type {Map<string, boolean>}
          */
-        _showNotice : function(video){
-            if(!video.showNotice){
-                video.div.classList.remove('c-h-n', 'c-h-b');
-                video.showNotice = true;
-            }
-        },
+        servicesState = new Map(),
 
         /**
-         * Get cookie by name
-         * @param {String} a cookie name
-         * @returns {String} cookie value
+         * @type {'api' | 'click'}
          */
-        _getCookie : function(a) {
-            return (a = document.cookie.match("(^|;)\\s*" + a + "\\s*=\\s*([^;]+)")) ? a.pop() : "";
-        },
+        currentEventSource = API_EVENT_SOURCE,
+
+        onChangeCallback;
+
+    /**
+     * Prevent direct use of the following
+     * props. in the `iframe` element to avoid
+     * potential issues
+     */
+    const disallowedProps = ['onload', 'onerror', 'src'];
+
+    const isFunction = el => typeof el === 'function';
+    const isString = el => typeof el === 'string';
+    const getBrowserLang = () => navigator.language.slice(0, 2).toLowerCase();
+
+    /**
+     * Create and return HTMLElement based on specified type
+     * @param {string} type
+     */
+    const createNode = (type) => doc.createElement(type);
+
+    /**
+     * @returns {HTMLDivElement}
+     */
+    const createDiv = () => createNode('div');
+
+    /**
+     * @returns {HTMLButtonElement}
+     */
+    const createButton = () => {
+        const btn = createNode('button');
+        btn.type = 'button';
+        return btn;
+    };
+
+    /**
+     * @param {HTMLElement} el
+     * @param {string} className
+     */
+    const setClassName = (el, className) => el.className = className;
+
+    /**
+     * @param {HTMLElement} el
+     * @param {string} className
+     * @returns
+     */
+    const addClass = (el, className) => el.classList.add(className);
+
+    /**
+     * @param {HTMLElement} parent
+     * @param {HTMLElement} child
+     */
+    const appendChild = (parent, child) => parent.appendChild(child);
+
+    /**
+     * @returns {string[]}
+     */
+    const getKeys = obj => obj && Object.keys(obj) || [];
+
+    /**
+     * @param {HTMLIFrameElement} iframe
+     * @param {Object.<string, string>} attrs
+     */
+    const setIframeAttributes = (iframe, attrs) => {
+        for(const key in attrs)
+            setAttribute(iframe, key, attrs[key]);
+    };
+
+    /**
+     * @param {HTMLDivElement} serviceDiv
+     * @returns {servicePropObj}
+     */
+    const getDivProps = (serviceDiv) => {
+
+        const dataset = serviceDiv.dataset;
+        const iframeAttrs = {};
+        const iframeAttrSelector = 'data-iframe-';
+
+        const iframeAttrNames = serviceDiv.getAttributeNames()
+            .filter(attr => attr.slice(0, 12) === iframeAttrSelector)
+            .map(attr => attr.slice(12));
+
+        const placeholderDiv = serviceDiv.querySelector('[data-placeholder]');
+        const dataVisible = placeholderDiv && placeholderDiv.hasAttribute('data-visible');
+        dataVisible && placeholderDiv.removeAttribute('data-visible');
+        const placeholderClone = placeholderDiv && placeholderDiv.cloneNode(true);
 
         /**
-         * Set cookie based on given object
-         * @param {Object} cookie 
+         * Get all "data-iframe-* attributes
          */
-        _setCookie : function(cookie) {
+        for(const attrName of iframeAttrNames)
+            iframeAttrs[attrName] = serviceDiv.getAttribute(iframeAttrSelector + attrName);
 
-            var date = new Date();
-            var path = cookie['path'] || "/";
-            var expiration = cookie['expiration'] || 182;
-            var sameSite = cookie['sameSite'] || "Lax";
-            var domain = cookie['domain'] || location.hostname;
-            
-            date.setTime(date.getTime() + (1000 * ( expiration * 24 * 60 * 60)));
-            var expires = " expires=" + date.toUTCString();
+        return {
+            _id: dataset.id,
+            _title: dataset.title,
+            _thumbnail: dataset.thumbnail,
+            _params: dataset.params,
+            _div: serviceDiv,
+            _innerContainer: null,
+            _placeholderDiv: placeholderDiv,
+            _initialPlaceholderClone: placeholderClone,
+            _backgroundDiv: null,
+            _hasIframe: false,
+            _hasNotice: false,
+            _showNotice: true,
+            _dataWidget: 'widget' in dataset,
+            _dataPlaceholderVisible: dataVisible,
+            _iframeAttributes: iframeAttrs
+        };
+    };
 
-            var cookieStr = cookie.name + "=1;" + expires + "; Path=" + path + ";";
-            cookieStr += " SameSite=" + sameSite + ";";
+    /**
+     * @param {string} serviceName
+     * @param {string} thumbnailUrl
+     */
+    const lazyLoadThumbnails = (serviceName, thumbnailUrl) => {
 
-            // assures cookie works with localhost (=> don't specify domain if on localhost)
-            if(domain.indexOf(".") > -1){
-                cookieStr += " Domain=" + domain + ";";
-            }
+        const serviceProps = allServiceProps[serviceName];
 
-            if(location.protocol === "https:") {
-                cookieStr += " Secure;";
-            }
-
-            document.cookie = cookieStr;
-        },
-
-        /**
-         * Delete cookie by name & path
-         * @param {Array} cookies 
-         * @param {String} custom_path
-         */
-         _eraseCookie : function(cookie) {
-            var path = cookie['path'] || "/";
-            var domain = cookie['domain'] || location.hostname;
-            var expires = 'Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-
-            document.cookie = cookie['name'] +'=; Path='+ path +'; Domain=' + domain + '; ' + expires;
-        },
-
-        /**
-         * Get all prop. keys defined inside object
-         * @param {Object} obj 
-         */
-        _getKeys : function(obj){
-            if(typeof obj === "object"){
-                var keys = [], i = 0;
-                for (keys[i++] in obj) {};
-                return keys;
-            }
-        },
-
-        /**
-         * Add link rel="preconnect"
-         * @param {String} url 
-         */
-        _preconnect: function(url){
-            var url = url.split("://");
-            var protocol = url[0];
-            
-            // if valid protocol
-            if(
-                protocol == 'http' || 
-                protocol == 'https'
-            ){
-                var domain = (url[1] && url[1].split("/")[0]) || false;
-                
-                // if not current domain
-                if(domain && domain !== location.hostname){
-                    if(this.preconnects.indexOf(domain) === -1){
-                        var l = this._createNode('link');
-                        l.rel = 'preconnect';
-                        l.href = protocol + "://" + domain;
-                        document.head.appendChild(l);
-                        this.preconnects.push(domain);
+        if ('IntersectionObserver' in win) {
+            const thumbnailObserver = new IntersectionObserver((entries) => {
+                for(const entry of entries){
+                    if(entry.isIntersecting){
+                        // index relative to the current service array
+                        loadThumbnail(thumbnailUrl, serviceProps[entry.target.dataset.index]);
+                        thumbnailObserver.unobserve(entry.target);
                     }
                 }
+            });
+
+            for(const serviceProp of serviceProps)
+                thumbnailObserver.observe(serviceProp._div);
+        }
+    };
+
+
+    /**
+     * @param {string} url
+     * @param {servicePropObj} serviceProp
+     */
+    const loadThumbnail = (url, serviceProp) => {
+
+        const loadBackgroundImage = (src) => {
+            serviceProp._backgroundDiv.style.backgroundImage = `url('${src}')`;
+
+            const img = new Image();
+            img.onload = () => addClass(serviceProp._backgroundDiv, 'loaded');
+            img.src = src;
+        };
+
+        // Set custom thumbnail if provided
+        if(isString(serviceProp._thumbnail)){
+            serviceProp._thumbnail !== '' && loadBackgroundImage(serviceProp._thumbnail);
+        }else{
+
+            if(isFunction(url)){
+                url(serviceProp._id, (src) => loadBackgroundImage(src));
+
+            }else if(isString(url)){
+                const src = url.replace(DATA_ID_PLACEHOLDER, serviceProp._id);
+                loadBackgroundImage(src);
             }
-        },
+        }
+
+    };
+
+    /**
+     * Create iframe and append it into the specified div
+     * @param {servicePropObj} serviceProp
+     * @param {ServiceConfig} serviceConfig
+     */
+    const createIframe = (serviceProp, serviceConfig) => {
+
+        // Create iframe only if doesn't already have one
+        if(serviceProp._hasIframe)
+            return;
+
+        serviceProp._hasIframe = true;
+
+        if(serviceProp._placeholderDiv){
+            const newFreshPlaceholder = serviceProp._initialPlaceholderClone.cloneNode(true);
+            serviceProp._placeholderDiv.replaceWith(newFreshPlaceholder);
+            serviceProp._placeholderDiv = newFreshPlaceholder;
+        }
+
+        const iframeProps = serviceConfig.iframe;
+
+        if(isFunction(serviceConfig.onAccept)){
+
+            // Let the onAccept method create the iframe
+            serviceConfig.onAccept(serviceProp._div, (iframe) => {
+
+                if(!(iframe instanceof HTMLIFrameElement))
+                    return false;
+
+                /**
+                 * Add global internal attributes
+                 */
+                setIframeAttributes(iframe, iframeProps);
+
+                /**
+                 * Add all data-attr-* attributes (iframe specific)
+                 */
+                setIframeAttributes(iframe, serviceProp._iframeAttributes);
+
+                serviceProp._iframe = iframe;
+                serviceProp._hasIframe = true;
+
+                // Hide loading circle
+                addClass(serviceProp._div, HIDE_LOADER_CLASS);
+
+                // Show placeholder
+                (!serviceProp._dataPlaceholderVisible || serviceProp._dataWidget)
+                    && addClass(serviceProp._div, SHOW_PLACEHOLDER_CLASS);
+            });
+
+            return;
+        }
+
+        serviceProp._iframe = createNode('iframe');
+
+        const iframeConfig = serviceConfig.iframe;
 
         /**
-         * Add link rel="preload"
-         * @param {String} url 
+         * @type {string}
          */
-        _thumbnailPreload : function(url){
-            if(url && this.preloads.indexOf(url) === -1){
-                var l = this._createNode('link');
-                l.rel = 'preload';
-                l.as = 'image';
-                l.href = url;
-                document.head.appendChild(l);
-                this.preloads.push(url);
+        const iframeParams = serviceProp._params || iframeConfig && iframeConfig.params;
+
+        // Replace data-id with valid resource id
+        const embedUrl = serviceConfig.embedUrl || '';
+        let src = embedUrl.replace(DATA_ID_PLACEHOLDER, serviceProp._id);
+
+        serviceProp._title && (serviceProp._iframe.title = serviceProp._title);
+
+        // Add parameters to src
+        if(iframeParams && isString(iframeParams)){
+            src += iframeParams.slice(0, 1) === '?'
+                ? iframeParams
+                : `?${iframeParams}`;
+        }
+
+        // When iframe is loaded => hide background image
+        serviceProp._iframe.onload = () => {
+            addClass(serviceProp._div, HIDE_LOADER_CLASS);
+            serviceProp._iframe.onload = undefined;
+
+            isFunction(iframeProps && iframeProps.onload)
+                && iframeProps.onload(serviceProp._id, serviceProp._iframe);
+        };
+
+        /**
+         * Add global internal attributes
+         */
+        setIframeAttributes(serviceProp._iframe, iframeProps);
+
+        /**
+         * Add all data-attr-* attributes (iframe specific)
+         */
+        setIframeAttributes(serviceProp._iframe, serviceProp._iframeAttributes);
+
+        serviceProp._iframe.src = src;
+
+        appendChild(serviceProp._innerContainer, serviceProp._iframe);
+    };
+
+    /**
+     * @param {HTMLElement} el
+     * @param {string} attrKey
+     * @param {string} attrValue
+     */
+    const setAttribute = (el, attrKey, attrValue) => {
+        if(!disallowedProps.includes(attrKey))
+            el.setAttribute(attrKey, attrValue);
+    };
+
+    /**
+     * Remove iframe HTMLElement from div
+     * @param {servicePropObj} serviceProp
+     */
+    const removeIframe = (serviceProp) => {
+        serviceProp._iframe && serviceProp._iframe.remove();
+        serviceProp._hasIframe = false;
+    };
+
+    /**
+     * Add necessary classes to hide notice
+     * @param {servicePropObj} serviceProp
+     */
+    const hideNotice = (serviceProp) => {
+        addClass(serviceProp._div, HIDE_NOTICE_CLASS);
+        serviceProp._showNotice = false;
+    };
+
+    /**
+     * Add necessary classes to show notice
+     * @param {servicePropObj} serviceProp
+     */
+    const showNotice = (serviceProp) => {
+        serviceProp._div.classList.remove(
+            HIDE_NOTICE_CLASS,
+            HIDE_LOADER_CLASS,
+            SHOW_PLACEHOLDER_CLASS
+        );
+        serviceProp._showNotice = true;
+    };
+
+    /**
+     * Get cookie by name
+     * @param {string} a cookie name
+     * @returns {string} cookie value
+     */
+    const getCookie = (a) => {
+        a = doc.cookie.match(`(^|;)\\s*${a}\\s*=\\s*([^;]+)`);
+
+        return a ? a.pop() : '';
+    };
+
+    /**
+     * Set cookie based on given object
+     * @param {CookieStructure} cookie
+     */
+    const setCookie = (cookie) => {
+
+        const { hostname, protocol } = location;
+        const name = cookie.name;
+        const value = '1';
+        const date = new Date();
+        const path = cookie.path || '/';
+        const expiration = (cookie.expiration || 182) * 86400000;
+        const sameSite = cookie.sameSite || 'Lax';
+        const domain = cookie.domain || hostname;
+
+        date.setTime(date.getTime() + expiration);
+
+        let cookieStr = name + '='
+            + value
+            + (expiration !== 0 ? `; Expires=${date.toUTCString()}` : '')
+            + `; Path=${path}`
+            + `; SameSite=${sameSite}`;
+
+        // assures cookie works with localhost (=> don't specify domain if on localhost)
+        if(domain.indexOf('.') > -1)
+            cookieStr += `; Domain=${domain}`;
+
+        if(protocol === 'https:')
+            cookieStr += '; Secure';
+
+        doc.cookie = cookieStr;
+    };
+
+    /**
+     * Delete cookie by name & path
+     * @param {CookieStructure} cookie
+     */
+    const eraseCookie = (cookie) => {
+        const name = cookie.name;
+        const path = cookie.path || '/';
+        const domain = cookie.domain || location.hostname;
+        const expires = 'Thu, 01 Jan 1970 00:00:01 GMT';
+
+        doc.cookie = `${name}=; Path=${path}; Domain=${domain}; Expires=${expires};`;
+    };
+
+    /**
+     * Create all notices relative to the specified service
+     * @param {string} serviceName
+     * @param {ServiceConfig} serviceConfig
+     * @param {boolean} hidden
+     */
+    const createAllNotices = (serviceName, serviceConfig, hidden) => {
+
+        // get number of iframes of current service
+        const serviceProps = allServiceProps[serviceName];
+        const languages = serviceConfig.languages;
+
+        serviceProps.forEach(serviceProp => {
+
+            if(!serviceProp._hasNotice && languages){
+                const lang = languages[currLang];
+                const loadBtnText = lang && lang.loadBtn;
+                const noticeText = lang && lang.notice;
+                const loadAllBtnText = lang && lang.loadAllBtn;
+
+                const fragment = doc.createElement('div');
+                const notice = createDiv();
+                const span = createDiv();
+                const innerDiv = createDiv();
+                const buttons = createDiv();
+
+                setClassName(fragment, 'cll');
+                serviceProp._innerContainer = fragment;
+
+                const showVideo = () => {
+                    hideNotice(serviceProp);
+                    createIframe(serviceProp, serviceConfig);
+                };
+
+                if(loadBtnText){
+                    const load_button = createButton();
+                    load_button.textContent = loadBtnText;
+                    setClassName(load_button, 'c-l-b');
+
+                    load_button.addEventListener(CLICK_EVENT_SOURCE, showVideo);
+                    appendChild(buttons, load_button);
+                }
+
+                if(loadAllBtnText){
+                    const load_all_button = createButton();
+                    load_all_button.textContent = loadAllBtnText;
+                    setClassName(load_all_button, loadBtnText ? 'c-la-b' : 'c-l-b');
+
+                    load_all_button.addEventListener(CLICK_EVENT_SOURCE, () => {
+                        showVideo();
+
+                        currentEventSource = CLICK_EVENT_SOURCE;
+                        api.acceptService(serviceName);
+                    });
+
+                    appendChild(buttons, load_all_button);
+                }
+
+                const notice_text = createDiv();
+                const ytVideoBackground = createDiv();
+                const loaderBg = createDiv();
+                const ytVideoBackgroundInner = createDiv();
+                const notice_text_container = createDiv();
+
+                setClassName(notice_text, 'cc-text');
+                setClassName(ytVideoBackgroundInner, 'c-bg-i');
+
+                serviceProp._backgroundDiv = ytVideoBackgroundInner;
+                setClassName(loaderBg, 'c-ld');
+
+                if(!isString(serviceProp._thumbnail) || serviceProp._thumbnail !== ''){
+                    setClassName(ytVideoBackground, 'c-bg');
+                }
+
+                const iframeTitle = serviceProp._title;
+                const fragment_2 = doc.createDocumentFragment();
+
+                if(iframeTitle) {
+                    const title_span = createNode('span');
+                    setClassName(title_span, 'c-tl');
+                    title_span.insertAdjacentHTML('beforeend', iframeTitle);
+                    appendChild(fragment_2, title_span);
+                }
+
+                appendChild(notice_text, fragment_2);
+                notice && notice_text.insertAdjacentHTML('beforeend', noticeText || '');
+                appendChild(span, notice_text);
+
+                setClassName(notice_text_container, 'c-t-cn');
+                setClassName(span, 'c-n-t');
+                setClassName(innerDiv, 'c-n-c');
+                setClassName(notice, 'c-nt');
+                setClassName(buttons,  'c-n-a');
+
+                appendChild(notice_text_container, span);
+
+                if(loadBtnText || loadAllBtnText)
+                    appendChild(notice_text_container, buttons);
+
+                appendChild(innerDiv, notice_text_container);
+                appendChild(notice, innerDiv);
+
+                appendChild(ytVideoBackground, ytVideoBackgroundInner);
+                appendChild(fragment, notice);
+                (serviceConfig.thumbnailUrl || serviceProp._thumbnail) && appendChild(fragment, ytVideoBackground);
+                appendChild(fragment, loaderBg);
+
+                hidden && addClass(serviceProp._div, HIDE_NOTICE_CLASS);
+
+                // Avoid reflow with fragment (only 1 appendChild)
+                serviceProp._div.prepend(fragment);
+                serviceProp._hasNotice = true;
+
+                setTimeout(()=> addClass(serviceProp._div, 'c-an'), 20);
             }
-        },
+        });
+    };
 
-        /**
-         * Create and return HTMLElement based on specified type
-         * @param {String} type 
-         * @returns {HTMLElement}
-         */
-        _createNode : function(type){
-            return document.createElement(type);
-        },
+    /**
+     * Hide notices for the specified service
+     * and then create iframes.
+     *
+     * @param {string} serviceName
+     * @param {ServiceConfig} serviceConfig
+     */
+    const hideAllNotices = (serviceName, serviceConfig) => {
 
-        /**
-         * Create all notices relative to the specified service
-         * @param {String} service_name 
-         * @param {Object} service 
-         * @param {Boolean} hidden 
-         */
-        _createAllNotices : function(service_name, service, hidden){
+        // get number of iframes of current service
+        const serviceProps = allServiceProps[serviceName];
 
-            // get number of iframes of current service
-            var iframes = this.iframes[service_name];
-            var n_iframes = iframes.length;
-            
-            // for each iframe
-            for(var i=0; i<n_iframes; i++){
-                (function(i){
+        const observeServiceDiv = (div, serviceName) => {
 
-                    var video = iframes[i];
+            if(!serviceObservers[serviceName]) {
+                serviceObservers[serviceName] = new IntersectionObserver((entries) => {
 
-                    if(!video.hasNotice){
-
-                        var loadBtnText = service['languages'][module.currLang]['loadBtn'];
-                        var noticeText = service['languages'][module.currLang]['notice'];
-                        var loadAllBtnText = service['languages'][module.currLang]['loadAllBtn'];
-
-                        var fragment = document.createDocumentFragment();
-                        var notice = module._createNode('div');
-                        var span = module._createNode('span');
-                        var innerDiv = module._createNode('p');
-                        var load_button = module._createNode('button');
-                        var load_all_button = module._createNode('button');
-            
-                        var notice_text = module._createNode('span');
-                        var ytVideoBackground = module._createNode('div');
-                        var loaderBg = module._createNode('div');
-                        var ytVideoBackgroundInner = module._createNode('div');
-                        var notice_text_container = module._createNode('div');
-                        var buttons = module._createNode('div');
-                        
-                        load_button.type = load_all_button.type = 'button';
-                        notice_text.className = 'cc-text';
-                        load_button.type = load_all_button.type = 'button';
-                        notice_text.className = 'cc-text';
-                        
-                        ytVideoBackgroundInner.className = 'c-bg-i';
-                        video.backgroundDiv = ytVideoBackgroundInner;
-                        loaderBg.className = 'c-ld';
-
-                        if(typeof video.thumbnail !== 'string' || video.thumbnail !== ""){
-                            ytVideoBackground.className = 'c-bg';
-                        }
-                     
-
-                        var iframeTitle = video._title;
-                        var fragment_2 = document.createDocumentFragment();
-        
-                        if(iframeTitle) {
-                            var title_span = module._createNode('span');
-                            title_span.className = 'c-tl';
-                            title_span.insertAdjacentHTML('beforeend', iframeTitle);
-                            fragment_2.appendChild(title_span);
-                        }
-                        
-                        load_button.textContent = loadBtnText;
-                        load_all_button.textContent = loadAllBtnText;
-
-                        notice_text.appendChild(fragment_2);
-                        notice && notice_text.insertAdjacentHTML('beforeend', noticeText || "");
-                        span.appendChild(notice_text);
-
-                      
-                        notice_text_container.className = 'c-t-cn';
-                        span.className = 'c-n-t';
-                        innerDiv.className = 'c-n-c';
-                        notice.className = 'c-nt';
-                        
-                        buttons.className =  'c-n-a';
-                        load_button.className = 'c-l-b';
-                        load_all_button.className = 'c-la-b';
-
-                        buttons.appendChild(load_button);
-                        buttons.appendChild(load_all_button);
-           
-                        notice_text_container.appendChild(span);
-                        notice_text_container.appendChild(buttons);
-            
-                        innerDiv.appendChild(notice_text_container);
-                        notice.appendChild(innerDiv);
-
-                        function showVideo(){
-                            module._hideNotice(video);
-                            module._createIframe(video, service);
-                        }
-                        
-                        load_button.addEventListener('click', function(){
-                            showVideo();
-                        });
-
-                        load_all_button.addEventListener('click', function(){
-                            showVideo();
-                            module.acceptService(service_name);
-                        });
-            
-                        ytVideoBackground.appendChild(ytVideoBackgroundInner);
-                        fragment.appendChild(notice);
-                        (service['thumbnailUrl'] || video.thumbnail) && fragment.appendChild(ytVideoBackground);
-                        fragment.appendChild(loaderBg);
-
-                        hidden && video.div.classList.add('c-h-n');
-
-                        // Avoid reflow with fragment (only 1 appendChild)
-                        video.div.appendChild(fragment);
-                        video.hasNotice = true;
+                    if(stopServiceObserver[serviceName]){
+                        serviceObservers[serviceName].disconnect();
+                        return;
                     }
-                })(i);
-            }
-        },
 
-        /**
-         * Hides all notices relative to the specified service
-         * and creates iframe with the video
-         * @param {String} service_name 
-         * @param {Object} service 
-         */
-        _hideAllNotices : function(service_name, service){
-
-            // get number of iframes of current service
-            var videos = this.iframes[service_name];
-            var n_iframes = videos.length;
-
-            if ("IntersectionObserver" in window) {
-                this.iframeObserver = new IntersectionObserver(function(entries) {
-                    for(var i=0; i<entries.length; ++i){
-                        if(module.iframeObserver === null){
-                            return;
-                        }
+                    for(let i=0; i<entries.length; ++i){
                         if(entries[i].isIntersecting){
-                            (function(_index){    
-                                setTimeout(function(){
-                                    var index = entries[_index].target.dataset.index;
-                                    module._createIframe(videos[index], service);
-                                    module._hideNotice(videos[index]);
-                                }, _index*50);
-                                module.iframeObserver.unobserve(entries[_index].target);
+                            ((i) => {
+                                /**
+                                 * @type {HTMLDivElement}
+                                 */
+                                const target = entries[i].target;
+                                const dataIndex = target.dataset.index;
+                                createIframe(serviceProps[dataIndex], serviceConfig);
+
+                                setTimeout(() => {
+                                    hideNotice(serviceProps[dataIndex]);
+                                }, i*50);
+
+                                serviceObservers[serviceName].unobserve(target);
                             })(i);
                         }
                     }
+
                 });
-   
-                for(var i=0; i<n_iframes; i++){
-                    if(!videos[i].hasIframe){
-                        this.iframeObserver.observe(videos[i].div);
+            }
+
+            serviceObservers[serviceName].observe(div);
+        };
+
+        serviceProps.forEach((serviceProp) => {
+            if(!serviceProp._hasIframe)
+                observeServiceDiv(serviceProp._div, serviceName);
+        });
+    };
+
+
+    /**
+     * Show notices for the specified service
+     * and remove iframes.
+     *
+     * @param {string} serviceName
+     * @param {ServiceConfig} serviceConfig
+     */
+    const showAllNotices = (serviceName, serviceConfig) => {
+
+        const serviceProps = allServiceProps[serviceName];
+
+        for(let i=0; i<serviceProps.length; i++){
+            ((i) => {
+
+                /**
+                 * Create iframe if it doesn't exist
+                 */
+                if(serviceProps[i]._hasIframe){
+                    if(isFunction(serviceConfig.onReject)){
+                        serviceConfig.onReject(serviceProps[i]._iframe, serviceProps[i]._div, () => showNotice(serviceProps[i]));
+                        serviceProps[i]._hasIframe = false;
+                    } else {
+                        removeIframe(serviceProps[i]);
                     }
                 }
-            }else{
-                for(var i=0; i<n_iframes; i++){
-                    (function(index){
-                        module._createIframe(videos[i], service);
-                        module._hideNotice(videos[index])
-                    })(i);
-                }
-            }
-        },
 
+                showNotice(serviceProps[i]);
+            })(i);
+        }
+    };
+
+    /**
+     * Validate language (make sure it exists)
+     *
+     * @param {string} lang
+     * @param {Object.<string, Object>} allLanguages
+     * @returns {string} language
+     */
+    const getValidatedLanguage = (lang, allLanguages) => {
+        if(lang in allLanguages){
+            return lang;
+        }else if(getKeys(allLanguages).length > 0){
+            return currLang in allLanguages
+                ? currLang
+                : getKeys(allLanguages)[0];
+        }
+    };
+
+    /**
+     * @param {string} serviceName
+     * @param {ServiceConfig} serviceConfig
+     */
+    const acceptHelper = (serviceName, serviceConfig) => {
+        const { cookie } = serviceConfig;
+
+        if(!getCookie(cookie.name))
+            setCookie(cookie);
+
+        hideAllNotices(serviceName, serviceConfig);
+    };
+
+    /**
+     * @param {string} serviceName
+     * @param {ServiceConfig} serviceConfig
+     */
+    const rejectHelper = (serviceName, serviceConfig) => {
+        const { cookie } = serviceConfig;
+
+        if(getCookie(cookie.name))
+            eraseCookie(cookie);
+
+        showAllNotices(serviceName, serviceConfig);
+    };
+
+    /**
+     * @param {string} serviceName
+     * @param {'accept' | 'reject'} action
+     * @param {string[]} changedServices
+     */
+    const fireOnChangeCallback = (serviceName, action, changedServices) => {
+        isFunction(onChangeCallback) && onChangeCallback({
+            eventSource: {
+                type: currentEventSource,
+                service: serviceName,
+                action
+            },
+            changedServices
+        });
+    };
+
+    const api = {
 
         /**
-         * Show all notices relative to the specified service
-         * and hides iframe with the video
-         * @param {String} service_name 
-         * @param {Object} service 
+         * @param {string} serviceName
          */
-        _showAllNotices : function(service_name, service){
+        acceptService: (serviceName) => {
+            const changedServices = [];
 
-            // get number of iframes of current service
-            var videos = this.iframes[service_name];
-            var n_iframes = videos.length;
+            if(serviceName === 'all'){
 
-            for(var i=0; i<n_iframes; i++){
-                (function(index){
-                    // if doesn't have iframe => create it
-                    if(!videos[i].showNotice){
-                        if(videos[i].hasIframe){
-                            module._removeIframe(videos[i]);
-                        }
-                        module._showNotice(videos[index]);
+                for(const name of serviceNames){
+                    stopServiceObserver[name] = false;
+
+                    if(!servicesState.get(name)){
+                        servicesState.set(name, true);
+                        acceptHelper(name, services[name]);
+                        changedServices.push(name);
                     }
-                })(i);
+                }
+
+                changedServices.length > 0 && fireOnChangeCallback(serviceName, ACCEPT_ACTION, changedServices);
+
+            }else if(serviceNames.includes(serviceName)){
+                stopServiceObserver[serviceName] = false;
+
+                if(!servicesState.get(serviceName)){
+                    servicesState.set(serviceName, true);
+                    acceptHelper(serviceName, services[serviceName]);
+                    changedServices.push(serviceName);
+                    fireOnChangeCallback(serviceName, ACCEPT_ACTION, changedServices);
+                }
             }
+
+            currentEventSource = API_EVENT_SOURCE;
         },
 
         /**
-         * Validate language (make sure it exists)
-         * @param {String} lang 
-         * @param {Object} all_languages 
-         * @returns {String} language
+         * @param {string} serviceName
          */
-        _getValidatedLanguage : function(lang, all_languages){
-            if(all_languages.hasOwnProperty(lang)){
-                return lang;
-            }else if(this._getKeys(all_languages).length > 0){
-                if(all_languages.hasOwnProperty(this.currLang)){
-                    return this.currLang ;
-                }else{
-                    return this._getKeys(all_languages)[0];
+        rejectService: (serviceName) => {
+
+            const changedServices = [];
+
+            if(serviceName === 'all'){
+
+                for(const name of serviceNames){
+                    stopServiceObserver[name] = true;
+                    rejectHelper(name, services[name]);
+
+                    if(servicesState.get(name)){
+                        servicesState.set(name, false);
+                        changedServices.push(name);
+                    }
+                }
+
+                changedServices.length > 0 && fireOnChangeCallback(serviceName, REJECT_ACTION, changedServices);
+
+            }else if(serviceNames.includes(serviceName)){
+                stopServiceObserver[serviceName] = true;
+                rejectHelper(serviceName, services[serviceName]);
+
+                if(servicesState.get(serviceName)){
+                    servicesState.set(serviceName, false);
+                    changedServices.push(serviceName);
+
+                    fireOnChangeCallback(serviceName, REJECT_ACTION, changedServices);
                 }
             }
         },
 
         /**
-         * Get current client's browser language
-         * @returns {String} browser language
+         * Check if a property/element is defined,
+         * if it's not then check again; repeat until maxTimeout reached.
+         *
+         * Useful when trying to use API from external scripts,
+         * or when you need to make sure a dom element exists
+         * (e.g. dynamically generated iframe).
+         *
+         * @param {object} config
+         * @param {any} [config.parent]
+         * @param {string} [config.childProperty]
+         * @param {string} [config.childSelector]
+         * @param {number} [config.timeout]
+         * @param {number} [config.maxTimeout]
+         * @returns {Promise<boolean>}
          */
-        _getBrowserLang : function(){
-            var browser_lang = navigator.language || navigator.browserLanguage;
-            browser_lang.length > 2 && (browser_lang = browser_lang[0]+browser_lang[1]);
-            return browser_lang.toLowerCase()
+        childExists: async ({parent=win, childProperty, childSelector='iframe', timeout=1000, maxTimeout=15000}) => {
+
+            let nTimeouts = 1;
+
+            const child = childProperty
+                ? () => parent[childProperty]
+                : () => parent.querySelector(childSelector);
+
+            return new Promise(resolve => {
+                const checkChild = () => {
+                    if (child() || nTimeouts++ * timeout > maxTimeout)
+                        return resolve(child() !== undefined);
+                    else
+                        setTimeout(checkChild, timeout);
+                };
+
+                checkChild();
+            });
         },
 
-        run : function(_config) {
+        getState: () => ({
+            services: new Map(servicesState),
+            acceptedServices: [...servicesState]
+                .filter(([, value]) => !!value)
+                .map(([name]) => name)
+        }),
+
+        getConfig: () => config,
+
+        run: (_config) => {
+
+            doc = document;
+            win = window;
+            config = _config;
+
             /**
              * Object with all services config.
              */
-            var services = _config['services'];
-            this.services = services;
+            services = config.services;
+
+            onChangeCallback = config.onChange;
 
             /**
              * Array containing the names of all services
              */
-            var service_names = this._getKeys(services);
-            this.serviceNames = service_names;
+            serviceNames = getKeys(services);
 
-            /**
-             * Number of services
-             */
-            var n_services = service_names.length;
-
-            // if there are no services => don't do anything
-            if(n_services === 0){
+            if(serviceNames.length === 0)
                 return;
-            }
 
             // Set curr lang
-            this.currLang = _config['currLang'];
-            var languages = services[service_names[0]]['languages'];
+            currLang = config.currLang;
+            const languages = services[serviceNames[0]].languages;
 
-            if(_config['autoLang'] === true){
-                this.currLang = this._getValidatedLanguage(this._getBrowserLang(), languages);
-            }else{
-                if(typeof _config['currLang'] === "string"){
-                    this.currLang = this._getValidatedLanguage(_config['currLang'], languages);
-                }
+            if(config.autoLang === true){
+                currLang = getValidatedLanguage(getBrowserLang(), languages);
+            }else if(isString(config.currLang)){
+                currLang = getValidatedLanguage(config.currLang, languages);
             }
 
             // for each service
-            for(var i=0; i<n_services; i++){
+            for(const serviceName of serviceNames){
+
+                const currService = services[serviceName];
 
                 /**
-                 * Name of current service
+                 * Use service's name as cookie name,
+                 * if no cookie.name is specified
+                 * @type {CookieStructure}
                  */
-                var service_name = service_names[i];
+                const cookieObj = (currService.cookie = currService.cookie || {});
+                const cookieName = (cookieObj.name = cookieObj.name || `im_${serviceName}`);
 
-                // add new empty array of videos (with current service name as property)
-                this.iframes[service_name] = [];
+                const cookieExists = getCookie(cookieName);
+                servicesState.set(serviceName, !!cookieExists);
+
+                // add new empty array of serviceProps (with current service name as property)
+                allServiceProps[serviceName] = [];
 
                 /**
-                 * iframes/divs in the dom that have data-service value as current service name
+                 * @type {NodeListOf<HTMLDivElement>}
                  */
-                var found_iframes = document.querySelectorAll('div[data-service="' + service_name + '"]');
-                
-                /**
-                 * number of iframes with current service
-                 */
-                var n_iframes = found_iframes.length;
+                const foundDivs = doc.querySelectorAll(`div[data-service="${serviceName}"]`);
+
+                const nDivs = foundDivs.length;
 
                 // if no iframes found => go to next service
-                if(n_iframes === 0){
+                if(nDivs === 0){
                     continue;
                 }
 
                 // add each iframe to array of iframes of the current service
-                for(var j=0; j<n_iframes; j++){
-                    found_iframes[j].dataset.index = j;
-                    this.iframes[service_name].push(this._getVideoProp(found_iframes[j]));
+                for(let j=0; j<nDivs; j++){
+                    foundDivs[j].dataset.index = j;
+                    allServiceProps[serviceName].push(getDivProps(foundDivs[j]));
                 }
 
-                var curr_service = services[service_name];
-
-                // check if cookie for current service is set
-                var cookie_name = curr_service['cookie']['name'];
-
-                // get current service's cookie value
-                var cookie = this._getCookie(cookie_name);
-    
                 // if cookie is not set => show notice
-                if(cookie){
-                    this._createAllNotices(service_name, curr_service, true);
-                    this._hideAllNotices(service_name, curr_service); 
+                if(cookieExists){
+                    createAllNotices(serviceName, currService, true);
+                    hideAllNotices(serviceName, currService);
                 }else{
-                    this._createAllNotices(service_name, curr_service, false);
+                    createAllNotices(serviceName, currService, false);
                 }
 
-                this._lazyLoadThumnails(service_name, curr_service['thumbnailUrl']);
+                lazyLoadThumbnails(serviceName, currService.thumbnailUrl);
             }
         }
     };
 
-    var fn_name = 'iframemanager';
+    const fnName = 'iframemanager';
 
-    window[fn_name] = function(){
-        window[fn_name] = undefined;
-        return module;
-    };
-    
+    if(typeof window !== 'undefined' && !isFunction(window[fnName])){
+        window[fnName] = () => api;
+    }
+
 })();
 window.addEventListener('load', function () {
   var manager = iframemanager();
