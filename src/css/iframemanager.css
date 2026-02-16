@@ -89,6 +89,10 @@ div[data-autoscale]{
 	width: 100%;
 }
 
+.wp-block-embed__wrapper{
+	height: 100%;
+}
+
 div[data-service] .c-nt{
 	color: #fff;
 	max-width: 100%;
